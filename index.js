@@ -3,22 +3,16 @@ const { google } = require("googleapis");
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require('fs');
 
-// Tạo file credentials.json từ biến môi trường
-const credentialsPath = './credentials.json';
-fs.writeFileSync(credentialsPath, process.env.CREDENTIALS);
-
-
-
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Sử dụng file credentials.json
+// Kết nối Google Sheets API
 const auth = new google.auth.GoogleAuth({
-  keyFile: credentialsPath,
+  keyFile: process.env.CREDENTIALS_PATH,
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
-const sheets = google.sheets({ version: "v4", auth });
 
+const sheets = google.sheets({ version: "v4", auth });
 // Hàm lấy toàn bộ dữ liệu từ Google Sheet
 async function getSheetData(sheetName) {
   try {
@@ -94,7 +88,7 @@ bot.onText(/\/update (.+)/, async (msg, match) => {
   // Mapping thành viên trong nhóm với sheet riêng
   const userSheets = {
     1564584883: "Tuấn", // Telegram ID -> Sheet "Tuấn"
-    87654321: "Duyên", // Telegram ID -> Sheet "Duyên"
+    6430635029: "Duyên", // Telegram ID -> Sheet "Duyên"
   };
 
   const sheetName = userSheets[userId];
