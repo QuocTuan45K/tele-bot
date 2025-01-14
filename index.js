@@ -1,13 +1,20 @@
 require("dotenv").config();
 const { google } = require("googleapis");
 const TelegramBot = require("node-telegram-bot-api");
+const fs = require('fs');
+
+// Tạo file credentials.json từ biến môi trường
+const credentialsPath = './credentials.json';
+fs.writeFileSync(credentialsPath, process.env.CREDENTIALS);
+
+
 
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Kết nối Google Sheets API
+// Sử dụng file credentials.json
 const auth = new google.auth.GoogleAuth({
-  keyFile: process.env.CREDENTIALS_PATH,
+  keyFile: credentialsPath,
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 const sheets = google.sheets({ version: "v4", auth });
