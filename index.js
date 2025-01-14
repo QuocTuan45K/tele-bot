@@ -5,9 +5,12 @@ const TelegramBot = require("node-telegram-bot-api");
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Sử dụng file credentials.json
+// Parse GOOGLE_CREDENTIALS từ biến môi trường
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+
+// Sử dụng credentials trực tiếp
 const auth = new google.auth.GoogleAuth({
-  keyFile: process.env.CREDENTIALS_PATH,
+  credentials, // Truyền trực tiếp object credentials
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 const sheets = google.sheets({ version: "v4", auth });
@@ -15,7 +18,7 @@ const sheets = google.sheets({ version: "v4", auth });
 // Hàm lấy toàn bộ dữ liệu từ Google Sheet
 async function getSheetData(sheetName) {
   try {
-    const range = `${sheetName}!A2:C`; // Phạm vi dữ liệu
+    const range = `${sheetName}!A2:C`;
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: range,
@@ -38,7 +41,7 @@ async function getSheetData(sheetName) {
 // Hàm cập nhật dữ liệu trong Google Sheet
 async function updateSheet(sheetName, id, newValue) {
   try {
-    const range = `${sheetName}!A2:C`; // Phạm vi dữ liệu
+    const range = `${sheetName}!A2:C`;
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: range,
@@ -50,7 +53,6 @@ async function updateSheet(sheetName, id, newValue) {
     // Tìm ID cần cập nhật
     for (let i = 0; i < rows.length; i++) {
       if (rows[i][0] === id.toString()) {
-        // Cập nhật giá trị mới
         await sheets.spreadsheets.values.update({
           spreadsheetId: process.env.SPREADSHEET_ID,
           range: `${sheetName}!C${i + 2}`, // Vị trí cột Count của hàng i+2
@@ -70,24 +72,22 @@ async function updateSheet(sheetName, id, newValue) {
 }
 
 bot.on("message", (msg) => {
-  const chatId = msg.chat.id; // ID của nhóm
-  const userId = msg.from.id; // ID của người gửi tin nhắn
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
   const username = msg.from.username || "Không có username";
   const firstName = msg.from.first_name || "Không có tên";
 
   bot.sendMessage(chatId, `User: ${firstName} (@${username})\nTelegram ID: ${userId}`);
 });
 
-// Xử lý lệnh Telegram
 bot.onText(/\/update (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id; // ID của nhóm
-  const userId = msg.from.id; // ID của người gửi tin nhắn
-  const username = msg.from.username || "No Username"; // Username của người gửi
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const username = msg.from.username || "No Username";
 
-  // Mapping thành viên trong nhóm với sheet riêng
   const userSheets = {
-    1564584883: "Tuấn", // Telegram ID -> Sheet "Tuấn"
-    6430635029: "Duyên", // Telegram ID -> Sheet "Duyên"
+    1564584883: "Tuấn",
+    6430635029: "Duyên",
   };
 
   const sheetName = userSheets[userId];
@@ -112,22 +112,18 @@ bot.onText(/\/update (.+)/, async (msg, match) => {
   const response = await updateSheet(sheetName, id, newValue);
   bot.sendMessage(chatId, `@${username}: ${response}`);
 
-  // Lấy và hiển thị dữ liệu sau khi cập nhật
   const updatedData = await getSheetData(sheetName);
   bot.sendMessage(chatId, updatedData);
 });
 
-// Lệnh start
 bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id; // ID của nhóm
-  const userId = msg.from.id; // ID của người gửi tin nhắn
-  const username = msg.from.username || "No Username"; // Username của người gửi
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const username = msg.from.username || "No Username";
 
-
-  // Mapping thành viên trong nhóm với sheet riêng
   const userSheets = {
-    1564584883: "Tuấn", // Telegram ID -> Sheet "Tuấn"
-    6430635029: "Duyên", // Telegram ID -> Sheet "Duyên"
+    1564584883: "Tuấn",
+    6430635029: "Duyên",
   };
 
   const sheetName = userSheets[userId];
@@ -136,7 +132,6 @@ bot.onText(/\/start/, async (msg) => {
     return;
   }
 
-  // Lấy và hiển thị dữ liệu hiện tại
   const dataMessage = await getSheetData(sheetName);
   bot.sendMessage(chatId, dataMessage);
 });
