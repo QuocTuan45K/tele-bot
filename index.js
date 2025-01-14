@@ -1,18 +1,21 @@
 require("dotenv").config();
 const { google } = require("googleapis");
 const TelegramBot = require("node-telegram-bot-api");
-const fs = require('fs');
+
+// Lấy thông tin từ biến môi trường
+const credentials = JSON.parse(process.env.CREDENTIALS); // Parse JSON từ biến môi trường
 
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
 // Kết nối Google Sheets API
 const auth = new google.auth.GoogleAuth({
-  keyFile: process.env.CREDENTIALS_PATH,
+  credentials: credentials, // Sử dụng trực tiếp credentials từ biến môi trường
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 
 const sheets = google.sheets({ version: "v4", auth });
+
 // Hàm lấy toàn bộ dữ liệu từ Google Sheet
 async function getSheetData(sheetName) {
   try {
@@ -70,6 +73,7 @@ async function updateSheet(sheetName, id, newValue) {
   }
 }
 
+// Xử lý lệnh Telegram
 bot.on("message", (msg) => {
   const chatId = msg.chat.id; // ID của nhóm
   const userId = msg.from.id; // ID của người gửi tin nhắn
@@ -79,7 +83,6 @@ bot.on("message", (msg) => {
   bot.sendMessage(chatId, `User: ${firstName} (@${username})\nTelegram ID: ${userId}`);
 });
 
-// Xử lý lệnh Telegram
 bot.onText(/\/update (.+)/, async (msg, match) => {
   const chatId = msg.chat.id; // ID của nhóm
   const userId = msg.from.id; // ID của người gửi tin nhắn
@@ -118,12 +121,10 @@ bot.onText(/\/update (.+)/, async (msg, match) => {
   bot.sendMessage(chatId, updatedData);
 });
 
-// Lệnh start
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id; // ID của nhóm
   const userId = msg.from.id; // ID của người gửi tin nhắn
   const username = msg.from.username || "No Username"; // Username của người gửi
-
 
   // Mapping thành viên trong nhóm với sheet riêng
   const userSheets = {
