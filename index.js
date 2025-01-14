@@ -1,37 +1,13 @@
 require("dotenv").config();
 const { google } = require("googleapis");
 const TelegramBot = require("node-telegram-bot-api");
-const fs = require("fs");
-
-// Kiểm tra biến môi trường cần thiết
-if (!process.env.CREDENTIALS || !process.env.TELEGRAM_BOT_TOKEN || !process.env.SPREADSHEET_ID) {
-  console.error("Lỗi: Biến môi trường thiếu hoặc không đúng định dạng!");
-  process.exit(1);
-}
-
-// Đường dẫn file credentials.json
-const credentialsPath = "./credentials.json";
-
-// Tạo file credentials.json từ biến môi trường
-if (!fs.existsSync(credentialsPath)) {
-  try {
-    const credentials = JSON.parse(process.env.CREDENTIALS.replace(/\\\\n/g, "\n"));
-    fs.writeFileSync(credentialsPath, JSON.stringify(credentials, null, 2));
-    console.log("File credentials.json đã được tạo thành công!");
-  } catch (error) {
-    console.error("Lỗi khi tạo file credentials.json:", error.message);
-    process.exit(1);
-  }
-} else {
-  console.log("File credentials.json đã tồn tại.");
-}
 
 // Khởi tạo bot Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Sử dụng Google Auth với file credentials.json
+// Sử dụng file credentials.json
 const auth = new google.auth.GoogleAuth({
-  keyFile: credentialsPath,
+  keyFile: process.env.CREDENTIALS_PATH,
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 const sheets = google.sheets({ version: "v4", auth });
@@ -39,7 +15,7 @@ const sheets = google.sheets({ version: "v4", auth });
 // Hàm lấy toàn bộ dữ liệu từ Google Sheet
 async function getSheetData(sheetName) {
   try {
-    const range = `${sheetName}!A2:C`;
+    const range = `${sheetName}!A2:C`; // Phạm vi dữ liệu
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: range,
@@ -47,10 +23,14 @@ async function getSheetData(sheetName) {
 
     const rows = response.data.values || [];
     if (rows.length === 0) return "Không có dữ liệu.";
-
-    return rows.map(row => `ID: ${row[0]}, Name: ${row[1]}, Count: ${row[2] || 0}`).join("\n");
+    
+    let dataMessage = "Dữ liệu hiện tại:\n";
+    rows.forEach((row) => {
+      dataMessage += `ID: ${row[0]}, Name: ${row[1]}, Count: ${row[2] || 0}\n`;
+    });
+    return dataMessage;
   } catch (error) {
-    console.error("Lỗi khi lấy dữ liệu Sheet:", error.message);
+    console.error("Lỗi khi lấy dữ liệu Sheet:", error);
     return "Lỗi khi lấy dữ liệu.";
   }
 }
@@ -58,75 +38,105 @@ async function getSheetData(sheetName) {
 // Hàm cập nhật dữ liệu trong Google Sheet
 async function updateSheet(sheetName, id, newValue) {
   try {
-    const range = `${sheetName}!A2:C`;
+    const range = `${sheetName}!A2:C`; // Phạm vi dữ liệu
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: range,
     });
 
-    const rows = response.data.values || [];
-    const rowIndex = rows.findIndex(row => row[0] === id.toString());
+    const rows = response.data.values;
+    let updated = false;
 
-    if (rowIndex === -1) return "Không tìm thấy ID.";
+    // Tìm ID cần cập nhật
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0] === id.toString()) {
+        // Cập nhật giá trị mới
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: process.env.SPREADSHEET_ID,
+          range: `${sheetName}!C${i + 2}`, // Vị trí cột Count của hàng i+2
+          valueInputOption: "RAW",
+          resource: { values: [[newValue]] },
+        });
+        updated = true;
+        break;
+      }
+    }
 
-    const updateRange = `${sheetName}!C${rowIndex + 2}`;
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: process.env.SPREADSHEET_ID,
-      range: updateRange,
-      valueInputOption: "RAW",
-      resource: { values: [[newValue]] },
-    });
-
-    return "Cập nhật thành công!";
+    return updated ? "Cập nhật thành công!" : "Không tìm thấy ID.";
   } catch (error) {
-    console.error("Lỗi khi cập nhật Sheet:", error.message);
+    console.error("Lỗi khi cập nhật Sheet:", error);
     return "Lỗi khi cập nhật dữ liệu.";
   }
 }
 
-// Xử lý lệnh Telegram
-bot.onText(/\/update (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const username = msg.from.username || "No Username";
+bot.on("message", (msg) => {
+  const chatId = msg.chat.id; // ID của nhóm
+  const userId = msg.from.id; // ID của người gửi tin nhắn
+  const username = msg.from.username || "Không có username";
+  const firstName = msg.from.first_name || "Không có tên";
 
-  const userSheets = {
-    1564584883: "Tuấn",
-    6430635029: "Duyên",
-  };
-
-  const sheetName = userSheets[userId];
-  if (!sheetName) {
-    return bot.sendMessage(chatId, `@${username}, bạn không có quyền sử dụng lệnh này.`);
-  }
-
-  const [id, value] = match[1].split(",").map(item => item.trim());
-  if (!id || isNaN(parseInt(value))) {
-    return bot.sendMessage(chatId, `@${username}, vui lòng gửi đúng định dạng: /update id, value`);
-  }
-
-  const response = await updateSheet(sheetName, id, parseInt(value));
-  bot.sendMessage(chatId, response);
-
-  const dataMessage = await getSheetData(sheetName);
-  bot.sendMessage(chatId, dataMessage);
+  bot.sendMessage(chatId, `User: ${firstName} (@${username})\nTelegram ID: ${userId}`);
 });
 
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const username = msg.from.username || "No Username";
+// Xử lý lệnh Telegram
+bot.onText(/\/update (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id; // ID của nhóm
+  const userId = msg.from.id; // ID của người gửi tin nhắn
+  const username = msg.from.username || "No Username"; // Username của người gửi
 
+  // Mapping thành viên trong nhóm với sheet riêng
   const userSheets = {
-    1564584883: "Tuấn",
-    6430635029: "Duyên",
+    1564584883: "Tuấn", // Telegram ID -> Sheet "Tuấn"
+    6430635029: "Duyên", // Telegram ID -> Sheet "Duyên"
   };
 
   const sheetName = userSheets[userId];
   if (!sheetName) {
-    return bot.sendMessage(chatId, `@${username}, bạn không có quyền xem dữ liệu.`);
+    bot.sendMessage(chatId, `@${username}, bạn không có quyền sử dụng lệnh này.`);
+    return;
   }
 
+  const data = match[1].split(",").map((item) => item.trim());
+  if (data.length < 2) {
+    bot.sendMessage(chatId, `@${username}, vui lòng gửi đúng định dạng: /update id, value`);
+    return;
+  }
+
+  const id = data[0];
+  const newValue = parseInt(data[1]);
+  if (isNaN(newValue)) {
+    bot.sendMessage(chatId, `@${username}, value phải là số.`);
+    return;
+  }
+
+  const response = await updateSheet(sheetName, id, newValue);
+  bot.sendMessage(chatId, `@${username}: ${response}`);
+
+  // Lấy và hiển thị dữ liệu sau khi cập nhật
+  const updatedData = await getSheetData(sheetName);
+  bot.sendMessage(chatId, updatedData);
+});
+
+// Lệnh start
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id; // ID của nhóm
+  const userId = msg.from.id; // ID của người gửi tin nhắn
+  const username = msg.from.username || "No Username"; // Username của người gửi
+
+
+  // Mapping thành viên trong nhóm với sheet riêng
+  const userSheets = {
+    1564584883: "Tuấn", // Telegram ID -> Sheet "Tuấn"
+    6430635029: "Duyên", // Telegram ID -> Sheet "Duyên"
+  };
+
+  const sheetName = userSheets[userId];
+  if (!sheetName) {
+    bot.sendMessage(chatId, `@${username}, bạn không có quyền xem dữ liệu.`);
+    return;
+  }
+
+  // Lấy và hiển thị dữ liệu hiện tại
   const dataMessage = await getSheetData(sheetName);
   bot.sendMessage(chatId, dataMessage);
 });
