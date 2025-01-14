@@ -127,7 +127,7 @@ bot.onText(/\/start/, async (msg) => {
   // Mapping thành viên trong nhóm với sheet riêng
   const userSheets = {
     1564584883: "Tuấn", // Telegram ID -> Sheet "Tuấn"
-    87654321: "Duyên", // Telegram ID -> Sheet "Duyên"
+    6430635029: "Duyên", // Telegram ID -> Sheet "Duyên"
   };
 
   const sheetName = userSheets[userId];
